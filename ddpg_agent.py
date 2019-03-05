@@ -22,11 +22,41 @@ class ddpgAgent:
 
         self.exptuple = namedtuple("experience", "state action reward new_state done")
     def store_exp(self, exp):
-
-        expt=exptuple(exp.vector_observations, )
         self.mem.store(exp)
+
+    def get_action(self, state):
+        action = self.actor_loc.forward(state)
+        # should i add noise?
+        return action
 
 
     def train(self):
         exp_batch =self.mem.draw(self.batch_size)
+
+        states = exp_batch.states
+        actions = exp_batch.actions
+        rewards = exp_batch.rewards
+        next_states= exp_batch.next_states
+        dones = exp_batch.dones
+
+        actions_new = self.actor_loc.forward(next_states)
+
+        q_target = (dones is False) *gamma* self.critic_tg.forward(states, act=actions_new) + rewards
+
+        # minimize Q estimation error
+        error = (self.critic_loc.forward(states, act=actions)- q_target)^2
+
+
+        prev_actions = self.actor_loc.forward(states)
+
+
+        # selecr action maximizing Q for current state.
+        optimize = self.critic_loc.forward(states, act=prev_actions)
+
+
+
+
+
+
+
 
