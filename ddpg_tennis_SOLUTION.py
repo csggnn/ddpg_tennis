@@ -2,6 +2,8 @@ from unityagents import UnityEnvironment
 import numpy as np
 import time
 
+from ddpg_agent import ddpgAgent
+
 env = UnityEnvironment(file_name="../Tennis_Linux/Tennis.x86_64")
 
 # get the default brain
@@ -51,7 +53,9 @@ for i in range(1, 60):                                      # play game for 5 ep
     states = env_info.vector_observations                  # get the current state (for each agent)
     scores = np.zeros(num_agents)                          # initialize the score (for each agent)
     while True:
-        actions = np.random.randn(num_agents, action_size) # select an action (for each agent)
+        actions = np.random.randn(1, action_size) # select an action (for each agent)
+        actions = np.repeat(actions,num_agents,0)
+
         actions = np.clip(actions, -1, 1)                  # all actions between -1 and 1
         env_info = env.step(actions)[brain_name]           # send all actions to tne environment
         next_states = env_info.vector_observations         # get next state (for each agent)
