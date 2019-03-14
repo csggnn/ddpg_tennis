@@ -27,7 +27,7 @@ def squeeze_iterable(element):
     return [out_value, out_iterable]
 
 
-class PyTorchBaseNetwork(nn.Module):
+class CriticNetwork(nn.Module):
     """
     Basic PyTorch Network composed of Convolutional and linear layers.
     The Convolutional linear layers are positioned before the linear layer by default. The network only supports linear
@@ -36,13 +36,13 @@ class PyTorchBaseNetwork(nn.Module):
 
     version = (0, 7)
 
-    def __init__(self, input_shape=(784,), conv_layers=None, lin_layers=(128, 64), output_shape=(10,), dropout_p=0,
-                 seed=None, actin_shape=None, actin_layer=None):
+    def __init__(self, input_shape=(784,), lin_layers=(400, 300), output_shape=(10,), action_shape=(1,), action_layer=-1, dropout_p=0,
+                 seed=None):
         """ Network architecture initialization according to linear and convolutional layers features """
         super().__init__()
         if seed is not None:
             self.seed=torch.manual_seed(seed)
-        self.pars_tuple = namedtuple('pyt_net_pars_tuple', 'input_shape conv_layers lin_layers output_shape dropout_p actin_shape actin_layer')
+        self.pars_tuple = namedtuple('ctitic_net_pars_tuple', 'input_shape lin_layers output_shape action_shape action_layer dropout_p')
         if isinstance(input_shape, str):
             ckp=input_shape
             saved = torch.load(ckp)
@@ -55,39 +55,36 @@ class PyTorchBaseNetwork(nn.Module):
             self.initialise()
             self.load_state_dict(saved["state_dict"])
         else:
-            self.pars = self.pars_tuple(input_shape,conv_layers,lin_layers,output_shape, dropout_p, actin_shape, actin_layer)
+            self.pars = self.pars_tuple(input_shape,lin_layers,output_shape, action_shape, action_layer, dropout_p)
             self.initialise()
 
     def initialise(self):
         [input_shape, iterable_input] = squeeze_iterable(self.pars.input_shape)
         [output_shape, _] = squeeze_iterable(self.pars.output_shape)
-        self.all_linear_network = not iterable_input
         if self.pars.dropout_p>0:
             self.dropout=nn.Dropout(p=self.pars.dropout_p)
-        if self.pars.actin_layer is not None:
-            if self.pars.actin_shape is not None:
-                if self.pars.actin_layer>=self.pars.lin_layers:
-                    self.pars.actin_layer=self.pars.lin_layers-1
-        if self.pars.actin_layer is None:
-            self.pars.actin_layer = -1
+
+        prev_layer_n = input_shape
+        self.fc_layers = nn.ModuleList()
+        self.act_layer=self.pars.action_layer
+        if self.act_layer<0:
+            self.act_layer = len(self.pars.lin_layers)-self.act_layer
+        if (self.act_layer<0)|(self.act_layer>len(self.pars.lin_layers)):
+            self.act_layer=len(self.pars.lin_layers)-1
 
 
-        if self.all_linear_network:
-            assert (self.pars.conv_layers is None)
-            prev_layer_n = input_shape
-            self.fc_layers = nn.ModuleList()
-            for curr_layer_i in range(len(self.pars.lin_layers)):
-                curr_layer_n = self.pars.lin_layers[curr_layer_i]
-                if curr_layer_i==self.pars.actin_layer:
-                    prev_layer_n+=self.pars.actin_shape
-                self.fc_layers.append(nn.Linear(prev_layer_n, curr_layer_n))
-                prev_layer_n = curr_layer_n
-            self.out_layer = nn.Linear(prev_layer_n, output_shape)
-        else:
-            assert (self.pars.conv_layers is not None)
-            print("Convolutional Layers not supported for the moment")
+        for curr_layer_i in range(len(self.pars.lin_layers)):
+            curr_layer_n = self.pars.lin_layers[curr_layer_i]
+            if curr_layer_i == self.act_layer:
+                [act_n, _] = squeeze_iterable(self.pars.action_shape)
+                prev_layer_n = prev_layer_n+act_n # action is an additional INPUT to this layer
+            self.fc_layers.append(nn.Linear(prev_layer_n, curr_layer_n))
+            self.fc_layers[curr_layer_i].weight.data.uniform_(-1.0/curr_layer_n, 1.0/curr_layer_n)
+            prev_layer_n = curr_layer_n
+        self.out_layer = nn.Linear(prev_layer_n, output_shape)
+        self.out_layer.weight.data.uniform_(-0.03, 0.03)
 
-    def forward(self, x, act=None):
+    def forward(self, x, act):
         """ Forward pass through the network, returns the output logits
 
         :param x(torch.FloatTensor): input or set of inputs to be processed by the network
@@ -98,23 +95,17 @@ class PyTorchBaseNetwork(nn.Module):
         if not isinstance(x, torch.FloatTensor):
             raise TypeError("x should be a Tensor of Float but is of type " + str(x.type()))
 
-        for fc_layer in self.fc_layers:
-            x = fc_layer(x)
-            x = tnn_functional.relu(x)
+        for fc_layer_i in range(len(self.fc_layers)):
+            fc_layer=self.fc_layers[fc_layer_i]
+            if fc_layer_i==self.act_layer:
+                x=fc_layer(torch.cat((x,act), 1))
+            else:
+                x = fc_layer(x)
+            x = tnn_functional.leaky_relu(x)
             if self.pars.dropout_p > 0:
                 x = self.dropout(x)
         x = self.out_layer(x)
         return x
-
-    def forward_np(self, x_np):
-        """ Forward pass through the network, returns the output logits. input is a numpy array
-
-        :param x(torch.FloatTensor): input or set of inputs to be processed by the network
-        """
-        x=torch.tensor(x_np).float()
-        x = self.forward(x)
-        x_np = x.detach().numpy()
-        return x_np
 
     def save_model(self, checkpoint_file, description=None):
         tosave = {"version": self.version, "pars": self.pars._asdict(),

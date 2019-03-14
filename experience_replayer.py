@@ -6,7 +6,7 @@ import numpy as np
 class ExperienceReplayer:
     """ data storage for implementing (priorityzed) Experience replay """
 
-    def __init__(self, max_length, default_prio=None, epsilon=0.1, seed=None):
+    def __init__(self, max_length, default_prio=None, epsilon=0.1, seed=None, wait_fill=0):
         """ Initialize an ExperienceReplayer object with or without priority
 
         :param max_length: size of the ExperienceReplayer buffer
@@ -19,6 +19,7 @@ class ExperienceReplayer:
         self.seed = np.random.seed(seed)
         self.max_length = max_length
         self.memory = deque(maxlen=max_length)
+        self.min_fill= max_length*wait_fill
         self.def_prio = default_prio
         self.use_prio = (default_prio is not None)
         if self.use_prio:
@@ -62,6 +63,8 @@ class ExperienceReplayer:
         """
         if number > len(self.memory):
             return None
+        if self.min_fill> len(self.memory):
+            return None
         if self.use_prio:
             if self.norm_prio is False:
                 self.compute_norm_prio_array()
@@ -80,7 +83,10 @@ class ExperienceReplayer:
         """
         self.norm_prio_array = np.array(self.prio_memory)
         self.norm_prio_array[self.norm_prio_array < 0] = 0
-        self.norm_prio_array = self.norm_prio_array * (1 - self.prio_epsilon) / (
-            sum(self.norm_prio_array)) + self.prio_epsilon / len(self.norm_prio_array)
+        if sum(self.norm_prio_array)>0:
+            self.norm_prio_array = self.norm_prio_array * (1 - self.prio_epsilon) / (
+              sum(self.norm_prio_array)) + self.prio_epsilon / len(self.norm_prio_array)
+        else:
+            self.norm_prio_array=self.norm_prio_array+1.0/len(self.norm_prio_array)
         self.norm_prio = True
         return self.norm_prio_array
