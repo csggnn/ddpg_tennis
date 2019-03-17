@@ -4,55 +4,123 @@ from critic_network import CriticNetwork
 from experience_replayer import ExperienceReplayer
 import torch
 import numpy as np
+import pickle
 
+def_pars={}
+def_pars["erep_size"] = int(1e5)  # replay buffer size
+def_pars["erep_fill"] = 0.2  # replay buffer size
+def_pars["erep_eps"] = 1.0
+def_pars["erep_def_prio"] = 0.001
+def_pars["batch"] = 64  # minibatch size
+def_pars["gamma"] = 0.99  # discount factor
+def_pars["tau"] = 1e-3  # for soft update of target parameters
+def_pars["lr_act"] = 1e-4  # learning rate of the actor
+def_pars["lr_crit"] = 1e-4  # learning rate of the critic
+def_pars["lazy_actor"] = 0.01
+def_pars["train_act_every"] = 4 # learn only once every LEARN_EVERY actions
+def_pars["actor_layers"] = (400, 300)
+def_pars["crit_layers"] = (400, 300)
+def_pars["act_input"] =-1
+
+
+def_pars["noise_in"] = 0.0005
+
+#def_pars["noise_dec"] = 0.999999
+#def_pars["noise_start"] = 0.02
+#def_pars["noise_stop"] = 0.0002
+
+
+def_pars["twin"] = False
+def_pars["ACTION_LAYER"] = -1
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class ddpgAgent:
-    def __init__(self, state_shape=(784,), actor_layers=(400, 300),
-                 critic_layers=(400, 300), seed=None, act_shape=(1,),
-                 action_layer=-1, batch_size=128):
-        lr_actor= 0.0001
-        lr_critic=0.0001
-        self.actor_loc = LinearNetwork(input_shape=state_shape, lin_layers=actor_layers, output_shape=act_shape,
-                                        seed=seed)
-        self.actor_tg = LinearNetwork(input_shape=state_shape, lin_layers=actor_layers, output_shape=act_shape,
-                                        seed=seed)
-        self.actor_optimizer = torch.optim.Adam(self.actor_loc.parameters(), lr=lr_actor)
+    def __init__(self, state_size=(784,), act_size=(1,), seed=None, parameter_dict=None):
 
-        self.critic_loc_1 = CriticNetwork(input_shape=state_shape, lin_layers=critic_layers, output_shape=(1,),
-                                         action_layer=action_layer, action_shape=act_shape, seed=seed)
-        self.critic_loc_2 = CriticNetwork(input_shape=state_shape, lin_layers=critic_layers, output_shape=(1,),
-                                         action_layer=action_layer, action_shape=act_shape, seed=seed)
+        if isinstance(state_size, str):
+            checkpoint_fold=state_size
+            with open(checkpoint_fold + "/pars.p", 'rb') as sf:
+                self.pars=pickle.load(sf)
+            self.initialize()
+            self.load_checkpoint(checkpoint_fold)
+            return
 
-        self.critic_tg_1 = CriticNetwork(input_shape=state_shape, lin_layers=critic_layers, output_shape=(1,),
-                                         action_layer=action_layer, action_shape=act_shape, seed=seed)
-        self.critic_tg_2 = CriticNetwork(input_shape=state_shape, lin_layers=critic_layers, output_shape=(1,),
-                                         action_layer=action_layer, action_shape=act_shape, seed=seed)
+        else:
+            if parameter_dict is None:
+                self.pars=def_pars
+            else:
+                self.pars=parameter_dict
+            self.pars["state_size"] = state_size
+            self.pars["act_size"] = act_size
+            self.pars["seed"] = seed
+            self.initialize()
+            return
 
-        self.critic_optimizer1 = torch.optim.Adam(self.critic_loc_1.parameters(), lr=lr_critic)
-        self.critic_optimizer2 = torch.optim.Adam(self.critic_loc_2.parameters(), lr=lr_critic)
 
-        self.batch_size=batch_size
-        self.mem = ExperienceReplayer(30000, wait_fill=0.02, default_prio=0.00001, epsilon=0.5)
+    def initialize(self):
 
-        #self.exptuple = namedtuple("experience", "state action reward next_state done")
+        self.net={}
+        self.opt={}
 
-        self.train_count =0
+        if self.pars["twin"]:
+            self.twins=["_1", "_2"]
+        else:
+            self.twins=[""]
+
+        for netname in ["act_loc", "act_tg"]:
+            self.net[netname]=LinearNetwork(input_shape=self.pars["state_size"],
+                                       lin_layers=self.pars["actor_layers"],
+                                       output_shape= self.pars["act_size"],
+                                       seed=self.pars["seed"])
+        self.opt["act"] =  torch.optim.Adam(self.net["act_loc"].parameters(), lr=self.pars["lr_act"])
+
+
+        for twin in self.twins:
+            for netname in ["crit_loc", "crit_tg"]:
+                self.net[netname+twin] = CriticNetwork(input_shape=self.pars["state_size"],
+                                          lin_layers=self.pars["crit_layers"],
+                                          output_shape=(1,),
+                                          action_layer=self.pars["act_input"],
+                                          action_shape=self.pars["act_size"],
+                                          seed=self.pars["seed"])
+            self.opt["crit"+twin] =torch.optim.Adam(self.net["crit_loc"+twin].parameters(), lr=self.pars["lr_crit"])
+
+        if self.pars["erep_eps"]<1.0:
+            self.mem = ExperienceReplayer(self.pars["erep_size"],
+                                          wait_fill=self.pars["erep_fill"],
+                                          default_prio=self.pars["erep_def_prio"],
+                                          epsilon=self.pars["erep_eps"])
+        else:
+            self.mem = ExperienceReplayer(self.pars["erep_size"],
+                                          wait_fill=self.pars["erep_fill"])
+
+        self.train_cr_count =0
     def store_exp(self, exp):
-        self.mem.store(exp, exp["reward"])
+        self.mem.store(exp)
+        #self.mem.store(exp, exp["reward"])
 
     def get_action(self, state, noise_weight=0, last_noise_sample=None):
-        action = self.actor_loc.forward_np(state)
+        action = self.net["act_loc"].forward_np(state)
         if noise_weight>0:
-            noise_sample=0.1*np.random.rand(len(action))+0.9*last_noise_sample-0.05
+            noise_sample=0.1*(np.random.rand(len(action))-0.5)+0.9*last_noise_sample
             action = action/(1.0+noise_weight) + noise_sample*noise_weight/(1.0+noise_weight)
         else:
             noise_sample=None
         # should i add noise?
         return action, noise_sample
 
+    def get_action_loc(self, state):
+        action = self.net["act_loc"].forward_np(state)
+        return action
+
+    def get_action_tg(self, state):
+        action = self.net["act_tg"].forward_np(state)
+        return action
+
 
     def train(self):
-        exp_batch =self.mem.draw(self.batch_size)
+        exp_batch =self.mem.draw(self.pars["batch"])
         if exp_batch is None:
             return
 
@@ -62,51 +130,57 @@ class ddpgAgent:
         actions_t = torch.from_numpy(np.vstack([e["action"] for e in exp_batch])).float()
         dones_t = torch.from_numpy(np.vstack([np.uint8(e["done"]) for e in exp_batch])).float()
 
-        # twin trick 1: add noise to
-        actions_next = self.actor_tg.forward(next_states_t) # would add noise here?
-        actions_next = torch.clamp(actions_next+torch.clamp(torch.randn(actions_next.shape)*0.001, -0.003, 0.003), -1.0, 1.0)
+
+        actions_next = self.net["act_tg"].forward(next_states_t)
+        # twin trick 1: add noise to inner action
+        if self.pars["noise_in"]>0:
+            n= self.pars["noise_in"]
+            actions_next = torch.clamp(
+                actions_next + torch.clamp(torch.randn(actions_next.shape) * n, -3*n, 3*n), -1.0, 1.0)
 
 
-        # trick 2: avoid optimistic q: get the minimum of two targets.
-        q_target_next = torch.min(self.critic_tg_1.forward(next_states_t, actions_next),
-                                  self.critic_tg_2.forward(next_states_t, actions_next))
+        # twin trick 2: avoid optimistic q: get the minimum of two targets.
+        if self.pars["twin"]:
+            q_target_next = torch.min(self.net["crit_tg_1"].forward(next_states_t, actions_next),
+                                      self.net["crit_tg_2"].forward(next_states_t, actions_next))
+        else:
+            q_target_next = self.net["crit_tg"].forward(next_states_t, actions_next)
 
-        # if done is true, does this mean that state is a terminal state or that next state is a terminal state?
-        # must be next_state is a terminal state otherwise i could not have taken action from state.
-        q_target = (1.0-dones_t)*q_target_next*0.9 + rewards_t
+        q_target = (1.0-dones_t)*q_target_next*self.pars["gamma"] + rewards_t
 
-        q_expected_1 = self.critic_loc_1.forward(states_t, actions_t)
-        q_expected_2 = self.critic_loc_2.forward(states_t, actions_t)
-        # cost is difference between estimated Q value for next state and estimated Q value for current state + reward
-        critic_error = torch.mean((q_target-q_expected_1)**2 + (q_target-q_expected_2)**2)
-
-        self.critic_optimizer1.zero_grad()
-        self.critic_optimizer2.zero_grad()
+        critic_error= 0
+        for twin in self.twins:
+            self.net["crit_loc"+twin].train()
+            q_exp = self.net["crit_loc"+twin].forward(states_t, actions_t)
+            critic_error+= torch.mean((q_target - q_exp) ** 2)
+            self.net["crit_loc" + twin].zero_grad()
+        # why not separate trainings?
         critic_error.backward()
-        self.critic_optimizer1.step()
-        self.critic_optimizer2.step()
+        for twin in self.twins:
+            self.opt["crit" + twin].step()
 
-        self.train_count = self.train_count+1
+        self.train_cr_count = self.train_cr_count+1
 
-        if self.train_count>3:
-            self.train_count=0
-
-            self.actor_optimizer.zero_grad()
-            self.critic_loc_1.eval()
-            self.actor_loc.train()
-            prev_actions = self.actor_loc.forward(states_t)
-            # selecr action maximizing Q for current state.
-            actor_q = -torch.mean(self.critic_loc_1.forward(states_t, act=prev_actions))
-
+        # twin trick 3: train critic more often then actor
+        if self.train_cr_count >= self.pars["train_act_every"]:
+            self.train_cr_count=0
+            self.net["crit_loc"+self.twins[0]].eval()
+            self.net["act_loc"].train()
+            self.opt["act"].zero_grad()
+            prev_actions = self.net["act_loc"].forward(states_t)
+ #          Lazy trick: maximize expected return from critic but minimize actions.
+            actor_q = torch.mean(prev_actions ** 2) * self.pars["lazy_actor"] \
+                      - torch.mean(self.net["crit_loc" + self.twins[0]].forward(states_t, act=prev_actions))
             actor_q.backward()
-            self.actor_optimizer.step()
-            self.critic_loc_1.train()
-            self.actor_loc.eval()
-            self.soft_update(self.actor_loc, self.actor_tg, 0.01)
-        # ----------------------- update target networks ----------------------- #
-        self.soft_update(self.critic_loc_1, self.critic_tg_1, 0.01)
-        self.soft_update(self.critic_loc_2, self.critic_tg_2, 0.01)
 
+            self.opt["act"].step()
+            self.net["crit_loc"+self.twins[0]].train()
+            self.net["act_loc"].eval()
+            self.soft_update(self.net["act_loc"], self.net["act_tg"], self.pars["tau"])
+        # ----------------------- update target networks ----------------------- #
+
+        for tw in self.twins:
+            self.soft_update(self.net["crit_loc"+tw], self.net["crit_tg"+tw], self.pars["tau"])
 
     def soft_update(self, local_model, target_model, tau):
         """Soft update model parameters.
@@ -121,7 +195,20 @@ class ddpgAgent:
         for target_param, local_param in zip(target_model.parameters(), local_model.parameters()):
             target_param.data.copy_(tau * local_param.data + (1.0 - tau) * target_param.data)
 
+    def checkpoint(self, fname):
+        for n in self.net:
+            self.net[n].save_model(fname + "/"+n+".ckp", description="n.a.")
+        with open(fname+"/pars.p", 'wb') as sf:
+            pickle.dump(self.pars, sf)
+        with open(fname+"/exp_rep", 'wb') as sf:
+            pickle.dump((self.mem.memory, self.mem.prio_memory), sf)
 
+    def load_checkpoint(self, fname):
+        for n in self.net:
+            self.net[n].load_model(fname + "/"+n+".ckp")
+            self.net[n].train()
+        with open(fname + "/exp_rep", 'rb') as sf:
+            self.mem.memory,self.mem.prio_memory = pickle.load(sf)
 
 
 

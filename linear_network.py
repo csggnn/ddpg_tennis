@@ -44,19 +44,22 @@ class LinearNetwork(nn.Module):
         self.pars_tuple = namedtuple('pyt_net_pars_tuple', 'input_shape lin_layers output_shape dropout_p')
         if isinstance(input_shape, str):
             ckp=input_shape
-            saved = torch.load(ckp)
-            if saved["version"] != self.version:
-                raise ImportError(
-                    "PyTorchBaseNetwork is now at version " + self.version + " but model was saved at version " + saved[
-                        'version'])
-            print("loading network " + saved["description"])
-            self.pars = self.pars_tuple(**saved["pars"])
-            self.initialise()
-            self.load_state_dict(saved["state_dict"])
+            self.load_model(ckp)
+
         else:
             self.pars = self.pars_tuple(input_shape,lin_layers,output_shape, dropout_p)
             self.initialise()
 
+    def load_model(self, ckp):
+        saved = torch.load(ckp)
+        if saved["version"] != self.version:
+            raise ImportError(
+                "PyTorchBaseNetwork is now at version " + self.version + " but model was saved at version " + saved[
+                    'version'])
+        print("loading network " + saved["description"])
+        self.pars = self.pars_tuple(**saved["pars"])
+        self.initialise()
+        self.load_state_dict(saved["state_dict"])
 
     def initialise(self):
         [input_shape, iterable_input] = squeeze_iterable(self.pars.input_shape)

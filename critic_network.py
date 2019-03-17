@@ -45,18 +45,21 @@ class CriticNetwork(nn.Module):
         self.pars_tuple = namedtuple('ctitic_net_pars_tuple', 'input_shape lin_layers output_shape action_shape action_layer dropout_p')
         if isinstance(input_shape, str):
             ckp=input_shape
-            saved = torch.load(ckp)
-            if saved["version"] != self.version:
-                raise ImportError(
-                    "PyTorchBaseNetwork is now at version " + self.version + " but model was saved at version " + saved[
-                        'version'])
-            print("loading network " + saved["description"])
-            self.pars = self.pars_tuple(**saved["pars"])
-            self.initialise()
-            self.load_state_dict(saved["state_dict"])
+            self.load_model(ckp)
         else:
             self.pars = self.pars_tuple(input_shape,lin_layers,output_shape, action_shape, action_layer, dropout_p)
             self.initialise()
+
+    def load_model(self, ckp):
+        saved = torch.load(ckp)
+        if saved["version"] != self.version:
+            raise ImportError(
+                "PyTorchBaseNetwork is now at version " + self.version + " but model was saved at version " + saved[
+                    'version'])
+        print("loading network " + saved["description"])
+        self.pars = self.pars_tuple(**saved["pars"])
+        self.initialise()
+        self.load_state_dict(saved["state_dict"])
 
     def initialise(self):
         [input_shape, iterable_input] = squeeze_iterable(self.pars.input_shape)
@@ -80,9 +83,11 @@ class CriticNetwork(nn.Module):
                 prev_layer_n = prev_layer_n+act_n # action is an additional INPUT to this layer
             self.fc_layers.append(nn.Linear(prev_layer_n, curr_layer_n))
             self.fc_layers[curr_layer_i].weight.data.uniform_(-1.0/curr_layer_n, 1.0/curr_layer_n)
+            self.fc_layers[curr_layer_i].bias.data.uniform_(-1.0 / curr_layer_n, 1.0 / curr_layer_n)
             prev_layer_n = curr_layer_n
         self.out_layer = nn.Linear(prev_layer_n, output_shape)
         self.out_layer.weight.data.uniform_(-0.03, 0.03)
+        self.out_layer.bias.data.uniform_(-0.03, 0.03)
 
     def forward(self, x, act):
         """ Forward pass through the network, returns the output logits

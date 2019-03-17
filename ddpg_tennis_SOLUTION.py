@@ -3,8 +3,12 @@ import numpy as np
 import time
 from collections import deque
 import matplotlib.pyplot as plt
-
+import random
 from ddpg_agent import ddpgAgent
+
+import pickle
+import os
+
 
 env = UnityEnvironment(file_name="../Tennis_Linux/Tennis.x86_64")
 
@@ -48,54 +52,86 @@ print('The state for the first agent looks like:', states[0])
 #     print('Score (max over agents) from episode {}: {}'.format(i, np.max(scores)))
 
 
-agent = ddpgAgent(state_shape=states.shape[1], act_shape=action_size, seed=5)
+agent = ddpgAgent(state_size=states.shape[1], act_size=action_size, seed=18)
 plt.ion()
 fig = plt.figure()
 ax = fig.add_subplot(111)
 
 
-noise=10
-noise_decay=0.999
-noise_stop=0.01
+noise_decay_p=0.99
+noise_start_p=1
+noise_stop_p=0.1
+noise_std=0.7
+noise_corr=0.7
+noise_p=noise_start_p
 scores_deque = deque(maxlen=100)
 scores_list = []
+scores_mean100 = []
 act_run=1
 last_steps=[]
+lazy_player=0.0
+coach_last_score=0.0
+
+noise=[[],[]]
+noise_episode=[[],[]]
+
 for i in range(num_agents):
     last_steps.append(deque(maxlen=10))
 
-for episode in range(1, 6000):   # play game for 5 episodes
+for episode in range(1, 20000):   # play game for 5 episodes
     actions = np.zeros([num_agents, action_size], np.float)
     env_info = env.reset(train_mode=False)[brain_name]     # reset the environment
     states = env_info.vector_observations                  # get the current state (for each agent)
     scores = np.zeros(num_agents)                          # initialize the score (for each agent)
     act_i=0
-    noise=max(noise*noise_decay, noise_stop)
-    ns=[np.random.rand(action_size)*2.0-1 for i in range(2)]
-    rewards=np.array(env_info.rewards)
+    noise_p = max(noise_p*noise_decay_p, noise_stop_p)
+    #rewards=np.array(env_info.rewards)
     dones =  env_info.local_done
     if np.any(dones):  # exit loop if episode finished
         break
 
-    boost=0
+
+    for i in range(2):
+        noise_episode[i] = np.random.rand()<noise_p
+        noise[i]=np.random.randn(action_size)*noise_std
+
+
     while True:
         if np.any(dones):  # exit loop if episode finished
             break
         act_i=act_i+1
+
         for i in range(2):
-            [actions[i], ns[i]] = agent.get_action(states[i], noise, ns[i])
-            boost+=0.1
+            noise[i] = noise[i]*noise_corr +  np.random.randn(action_size)*noise_std*(1-noise_corr)
+        #for i in range(2):
+        #    [actions[i], ns[i]] = agent.get_action(states[i], noise, ns[i])
+        if episode>0:
+            actions[0]=agent.get_action_loc(states[0])+noise[0]*noise_episode[0]
+            actions[1]=agent.get_action_tg(states[1])+noise[1]*noise_episode[1]
+        else:
+            actions[0]=np.random.randn(action_size)*noise[0]
+            actions[1]=np.random.randn(action_size)*noise[1]
+
+        #actions[1] = 0
+        #actions[0] = 0
         actions = np.clip(actions, -1, 1)                  # all actions between -1 and 1
-        for act_r in range(act_run):
-            env_info = env.step(actions)[brain_name]           # send all actions to tne environment
-            next_states = env_info.vector_observations         # get next state (for each agent)
-            rewards += np.array(env_info.rewards) #    +boost   # get reward (for each agent)
-            dones = env_info.local_done                        # see if episode finishes
-            scores += env_info.rewards                         # update the score (for each agent)
-            if np.any(dones):                                  # exit loop if episode finished
-                break
+        env_info = env.step(actions)[brain_name]           # send all actions to tne environment
+        next_states = env_info.vector_observations         # get next state (for each agent)
+        rewards = (env_info.rewards-np.sum(np.square(actions), 1)*lazy_player)  # get reward (for each agent)
+        dones = env_info.local_done                        # see if episode finishes
+        scores += env_info.rewards                         # update the score (for each agent)
         for i in range(2):
-            last_steps[i].append({"state": states[i], "action": actions[i], "reward": 0,"next_state": next_states[i], "done":dones[i]})
+            last_steps[i].append(
+                {"state": states[i], "action": actions[i], "reward": 0, "next_state": next_states[i], "done": dones[i]})
+        if np.any(dones):                                  # exit loop if episode finished
+            # first save the experiences
+            for i in range(2):
+                while len(last_steps[i])>0:
+                    exp = last_steps[i].popleft()
+                    agent.store_exp(exp)
+            # then go out
+            break
+        for i in range(2):
             if rewards[i]!=0:
                 saved_steps=len(last_steps[i])
                 for exp in last_steps[i]:
@@ -105,18 +141,59 @@ for episode in range(1, 6000):   # play game for 5 episodes
                 agent.store_exp(exp)
         states = next_states                               # roll over states to next time step
 
-        if act_i%2==0:
+        if act_i%5==0:
             agent.train()
 
     scores_deque.append(np.max(scores))
+    scores_mean100.append(np.mean(scores_deque))
     scores_list.append(np.max(scores))
     if episode % 200 == 0:
         ax.clear()
         ax.plot(np.arange(1, len(scores_list) + 1), scores_list)
+        ax.plot(np.arange(1, len(scores_mean100) + 1-50), scores_mean100[50:])
+
         plt.ylabel('Score')
         plt.xlabel('Episode #')
         plt.draw()
         plt.pause(.001)
-    print('Score (max over agents) from episode {}: {}'.format(i, np.max(scores)))
+
+    # save the score list
+    if episode % 50 == 0:
+        with open("tmp_checkpoints/score.p", 'wb') as sf:
+            pickle.dump([scores_list, scores_mean100], sf)
+
+    #save weights
+    if (episode % 500 == 0) or ((episode % 100 == 0) and (episode<=300)):
+        d="tmp_checkpoints/agent_%06d_avscore_%3.3f/" % (episode, scores_mean100[-1])
+        if not os.path.exists(d):
+            os.mkdir(d)
+        agent.checkpoint(d)
+        with open(d+"/score.p", 'wb') as sf:
+            pickle.dump([scores_list, scores_mean100], sf)
+
+    if (episode>200 and  episode % 25  == 0):
+        print("episode "+str(episode)+ ", mean last_score: "+str(np.mean(scores_list[-25:])) )
+        if coach_last_score>0.03 and np.mean(scores_list[-25:])<coach_last_score*0.7:
+            coach_last_score*=0.7
+            print("rolling back as score was previously "+ str(coach_last_score))
+            agent.load_checkpoint("tmp_checkpoints/coach_last")
+            sel= random.choice(["a", "c", "n"])
+            if sel =="a":
+                agent.pars["lr_act"] *=0.85
+            elif sel == "c":
+                agent.pars["lr_crit"] *= 0.85
+            elif sel == "n":
+                agent.pars["noise_in"] *= 1.2
+        else:
+            coach_last_score=np.mean(scores_list[-25:])
+            agent.checkpoint("tmp_checkpoints/coach_last")
+            if coach_last_score>0.03:
+                agent.pars["lr_act"] *=1.01
+                agent.pars["lr_crit"] *=1.01
+                agent.pars["noise_in"] *=0.99
+
+
+
+
 env.close()
 
