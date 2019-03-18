@@ -23,7 +23,7 @@ def_pars["crit_layers"] = (400, 300)
 def_pars["act_input"] =-1
 
 
-def_pars["noise_in"] = 0.0005
+def_pars["noise_in"] = 0.0003
 
 #def_pars["noise_dec"] = 0.999999
 #def_pars["noise_start"] = 0.02

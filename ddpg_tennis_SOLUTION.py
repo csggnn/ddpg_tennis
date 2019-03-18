@@ -60,8 +60,8 @@ ax = fig.add_subplot(111)
 
 noise_decay_p=0.99
 noise_start_p=1
-noise_stop_p=0.1
-noise_std=0.7
+noise_stop_p=0.05
+noise_std=0.5
 noise_corr=0.7
 noise_p=noise_start_p
 scores_deque = deque(maxlen=100)
@@ -78,7 +78,7 @@ noise_episode=[[],[]]
 for i in range(num_agents):
     last_steps.append(deque(maxlen=10))
 
-for episode in range(1, 20000):   # play game for 5 episodes
+for episode in range(1, 100000):   # play game for 5 episodes
     actions = np.zeros([num_agents, action_size], np.float)
     env_info = env.reset(train_mode=False)[brain_name]     # reset the environment
     states = env_info.vector_observations                  # get the current state (for each agent)
@@ -107,7 +107,7 @@ for episode in range(1, 20000):   # play game for 5 episodes
         #    [actions[i], ns[i]] = agent.get_action(states[i], noise, ns[i])
         if episode>0:
             actions[0]=agent.get_action_loc(states[0])+noise[0]*noise_episode[0]
-            actions[1]=agent.get_action_tg(states[1])+noise[1]*noise_episode[1]
+            actions[1]=agent.get_action_loc(states[1])+noise[1]*noise_episode[1]
         else:
             actions[0]=np.random.randn(action_size)*noise[0]
             actions[1]=np.random.randn(action_size)*noise[1]
