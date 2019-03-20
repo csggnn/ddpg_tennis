@@ -7,3 +7,5 @@ unity-environment.log
 tmp_checkpoints/
 
 __pycache__/
+
+checkpoints/lucky_shot_0/
