@@ -11,27 +11,29 @@ def_pars["erep_size"] = int(1e5)  # replay buffer size
 def_pars["erep_fill"] = 0.2  # replay buffer size
 def_pars["erep_eps"] = 1.0
 def_pars["erep_def_prio"] = 0.001
-def_pars["batch"] = 256  # minibatch size
-def_pars["gamma"] = 0.95  # discount factor
+def_pars["batch"] = 64  # minibatch size
+def_pars["gamma"] = 0.99  # discount factor
 def_pars["tau"] = 1e-1 # for soft update of target parameters
-def_pars["lr_act"] = 3e-5  # learning rate of the actor
-def_pars["lr_crit"] = 3e-5  # learning rate of the critic
+def_pars["lr_act"] = 5e-5  # learning rate of the actor
+def_pars["lr_crit"] = 1e-4  # learning rate of the critic
 def_pars["lazy_actor"] = 0.000
-def_pars["train_act_every"] = 4 # learn only once every LEARN_EVERY actions
-def_pars["actor_layers"] = (400, 300, 300)
-def_pars["crit_layers"] = (400, 300, 300)
+def_pars["train_act_every"] = 2 # learn only once every LEARN_EVERY actions
+def_pars["actor_layers"] = (400,300)
+def_pars["crit_layers"] = (400,300)
 def_pars["act_input"] =-1
+def_pars["grad_clip"] = 0
+def_pars["batch_norm"] = True
+def_pars["twin"] = False
 
 
-def_pars["noise_in"] = 0.00003
+def_pars["noise_in"] = 0.00000
 
 #def_pars["noise_dec"] = 0.999999
 #def_pars["noise_start"] = 0.02
 #def_pars["noise_stop"] = 0.0002
 
 
-def_pars["twin"] = False
-def_pars["ACTION_LAYER"] = -1
+
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -72,8 +74,8 @@ class ddpgAgent:
             self.net[netname]=LinearNetwork(input_shape=self.pars["state_size"],
                                        lin_layers=self.pars["actor_layers"],
                                        output_shape= self.pars["act_size"],
-                                       seed=self.pars["seed"], dropout_p=0.5)
-        self.opt["act"] =  torch.optim.RMSprop(self.net["act_loc"].parameters(), lr=self.pars["lr_act"])
+                                       seed=self.pars["seed"])
+        self.opt["act"] =  torch.optim.Adam(self.net["act_loc"].parameters(), lr=self.pars["lr_act"])
 
 
         for twin in self.twins:
@@ -83,8 +85,8 @@ class ddpgAgent:
                                           output_shape=(1,),
                                           action_layer=self.pars["act_input"],
                                           action_shape=self.pars["act_size"],
-                                          seed=self.pars["seed"], dropout_p=0.5)
-            self.opt["crit"+twin] =torch.optim.RMSprop(self.net["crit_loc"+twin].parameters(), lr=self.pars["lr_crit"])
+                                          seed=self.pars["seed"])
+            self.opt["crit"+twin] =torch.optim.Adam(self.net["crit_loc"+twin].parameters(), lr=self.pars["lr_crit"])
 
         if self.pars["erep_eps"]<1.0:
             self.mem = ExperienceReplayer(self.pars["erep_size"],

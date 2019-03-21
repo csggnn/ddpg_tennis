@@ -32,7 +32,7 @@ states = env_info.vector_observations
 actions=[[],[]]
 
 for i in range(50):
-    env_info = env.reset(train_mode=False)[brain_name]
+    env_info = env.reset(train_mode=True)[brain_name]
     states = env_info.vector_observations
 
     done =False
