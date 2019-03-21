@@ -80,12 +80,13 @@ coach_last_score=0.0
 noise=[[],[]]
 noise_episode=[[],[]]
 
-max_score_mean100=0.3
+max_score_mean100=0.001
+max_score_mean25=0.001
 
 for i in range(num_agents):
     last_steps.append(deque(maxlen=3))
 
-for episode in range(1, 50000):   # play game for 5 episodes
+for episode in range(1, 150000):   # play game for 5 episodes
     actions = np.zeros([num_agents, action_size], np.float)
     env_info = env.reset(train_mode=True)[brain_name]     # reset the environment
     states = env_info.vector_observations
@@ -181,19 +182,22 @@ for episode in range(1, 50000):   # play game for 5 episodes
             pickle.dump([scores_list, scores_mean100], sf)
 
     #save weights
-    if (episode % 500 == 0) or ((episode % 100 == 0) and (episode<=300)) or (scores_mean100[-1] > max_score_mean100):
-        print("agent_%06d_avscore_%3.3f" % (episode, scores_mean100[-1]))
+    if (episode % 2000 == 0) or ((episode % 200 == 0) and (episode<=1000)) \
+            or (scores_mean100[-1] > max_score_mean100+0.01) or np.mean(scores_list[-25:])>max_score_mean25+0.02:
+        print("agent_%06d_s100_%3.3f_s25_%3.3f" % (episode, scores_mean100[-1], np.mean(scores_list[-25:])))
         if (scores_mean100[-1] > max_score_mean100):
             max_score_mean100 = scores_mean100[-1]
-        d="tmp_checkpoints/agent_%06d_avscore_%3.3f/" % (episode, scores_mean100[-1])
+        if (np.mean(scores_list[-25:]) > max_score_mean25):
+            max_score_mean25 = np.mean(scores_list[-25:])
+        d="tmp_checkpoints/agent_%06d_s100_%3.3f_s25_%3.3f/" % (episode, scores_mean100[-1], np.mean(scores_list[-25:]))
         if not os.path.exists(d):
             os.mkdir(d)
             os.mkdir(d + "1")
             os.mkdir(d + "2")
         agent.checkpoint(d + "1/")
         agent2.checkpoint(d + "2/")
-        with open(d+"/score.p", 'wb') as sf:
-            pickle.dump([scores_list, scores_mean100], sf)
+        #with open(d+"/score.p", 'wb') as sf:
+        #    pickle.dump([scores_list, scores_mean100], sf)
 
 
 """
