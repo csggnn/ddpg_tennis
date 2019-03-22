@@ -159,7 +159,7 @@ for episode in range(1, 150000):   # play game for 5 episodes
 
         states = next_states                               # roll over states to next time step
 
-        if act_i%2==0:
+        if act_i%2==0 and act_i < 30:
             agent.train()
             agent2.train()
 
