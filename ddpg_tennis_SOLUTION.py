@@ -62,13 +62,13 @@ fig = plt.figure()
 ax = fig.add_subplot(111)
 
 
-noise_decay_p=0.99
+noise_decay_p=0.999
 noise_start_p=1
-noise_stop_p=0.05
+noise_stop_p=0.001
 
 noise_std=0.5
 noise_std_low = 0.02
-noise_corr=0.7
+noise_corr=0.5
 noise_p=noise_start_p
 scores_deque = deque(maxlen=100)
 scores_list = []
@@ -203,8 +203,8 @@ for episode in range(1, 150000):   # play game for 5 episodes
 """
     if (episode>200 and  episode % 25  == 0):
         print("episode "+str(episode)+ ", mean last_score: "+str(np.mean(scores_list[-25:])) )
-        if coach_last_score>0.03 and np.mean(scores_list[-25:])<coach_last_score*0.7:
-            coach_last_score*=0.7
+        if coach_last_score>0.1 and np.mean(scores_list[-25:])<coach_last_score*0.8:
+            coach_last_score*=0.8
             print("rolling back as score was previously "+ str(coach_last_score))
             agent.load_checkpoint("tmp_checkpoints/coach_last")
             sel= random.choice(["a", "c", "n"])

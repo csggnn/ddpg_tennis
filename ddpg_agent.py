@@ -8,7 +8,7 @@ import pickle
 
 def_pars={}
 def_pars["erep_size"] = int(1e5)  # replay buffer size
-def_pars["erep_fill"] = 0.2  # replay buffer size
+def_pars["erep_fill"] = 0.1  # replay buffer size
 def_pars["erep_eps"] = 1.0
 def_pars["erep_def_prio"] = 0.001
 def_pars["batch"] = 128  # minibatch size
