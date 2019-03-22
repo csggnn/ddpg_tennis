@@ -119,7 +119,7 @@ for episode in range(1, 150000):   # play game for 5 episodes
             actions[0]=agent.get_action_loc(states[0])
             actions[0] +=noise[0]*(noise_episode[0]*noise_std + noise_std_low)
             actions[1]=agent2.get_action_loc(states[1])
-            actions[1]+=noise[1]*(noise_episode[0]*noise_std + noise_std_low)
+            actions[1]+=noise[1]*(noise_episode[1]*noise_std + noise_std_low)
         else:
             actions[0]=np.random.randn(action_size)*noise[0]
             actions[1]=np.random.randn(action_size)*noise[1]
