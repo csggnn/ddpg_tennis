@@ -3,7 +3,11 @@
 
 ### Learning Strategy
 
-This project is a solution to the cooperative Tennis environment using 2 identical agents implementing [Deep Deterministic Policy Gradients (DDPG)](https://arxiv.org/abs/1509.02971).  
+This project is a solution to the cooperative Tennis environment using  [Deep Deterministic Policy Gradients (DDPG)](https://arxiv.org/abs/1509.02971).  
+
+Here is my trained ddpg agent in action
+
+![score_graph](plots/tennis.gif)
 
 The the next chapter presents a short overview of DDPG, which can be seen as an adaptation of Deep Q-Networks to the case of 
 countinuous action space.
@@ -325,9 +329,12 @@ hyperparameters can easily outweight algorithm modifications in determining the 
 algorithm modifications are only effective with appropriate parameter tuning.
 
 As a consequence, while tying to implement, experimenting and getting a feeling of different 
-algorithm modification may be beneficial and interesting. Focusing on a single algorithm and modification and 
-the actual contribution of that single modification to algorithm performance is by itself a very complex task 
-requiring full attention.
+algorithm modification may be beneficial and interesting, in the interest of performance I expect greater benefits
+to be achieved by parameter tuning and possibly verification of the implementation.
+
+After parameters and implementation have been toroughly investigated, I would focusing on a single algorithm 
+modification, as assessing the actual contribution of that single modification to algorithm performance is by itself a 
+very complex task requiring full attention.
 
 #### My choice
 
