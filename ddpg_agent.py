@@ -5,6 +5,7 @@ from experience_replayer import ExperienceReplayer
 import torch
 import numpy as np
 import pickle
+import os
 
 def_pars={}
 def_pars["erep_size"] = int(1e5)  # replay buffer size
@@ -214,8 +215,9 @@ class ddpgAgent:
         for n in self.net:
             self.net[n].load_model(fname + "/"+n+".ckp")
             self.net[n].train()
-        with open(fname + "/exp_rep", 'rb') as sf:
-            self.mem.memory,self.mem.prio_memory = pickle.load(sf)
+        if os.path.isfile(fname + "/exp_rep"):
+            with os.path.isfile(fname + "/exp_rep", 'rb') as sf:
+                self.mem.memory,self.mem.prio_memory = pickle.load(sf)
 
 
 
