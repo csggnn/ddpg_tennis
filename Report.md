@@ -1,7 +1,7 @@
 ## Udacity Deep Reinforcement Learning Nanodegree
 # Collaboration and Competition Project Report
 
-### Learning Strategy
+### Introduction
 
 This project is a solution to the cooperative Tennis environment using  [Deep Deterministic Policy Gradients (DDPG)](https://arxiv.org/abs/1509.02971).  
 
@@ -114,9 +114,7 @@ two players, and using separate agents with same experience buffer (option 3 sha
 My final solution is a combination of options 2, 3 and 4, using an "agent coach" as explained in the **Selected Custom 
 Modifications** paragraph.
 
-### Implementation
-
-#### Project structure
+### Implementation structure
 
  - **ddpg_tennis_SOLUTION.py** is the main file of the project. It is used to train a DDPG agent on the tennis 
     environment and includes several training improvement ideas.
@@ -150,9 +148,9 @@ Modifications** paragraph.
  - **experience_replayer.py** the experience buffer used by the ddpg_agent, supporting a from of prioritized experience
    replay.
  
-### Approach, Experimentation and Future Work
 
-#### General Approach
+### General Approach and Experimentation
+
 In the previous assignments, I have learned to my expense that tuning a baseline solution and performing the minimum 
 number of modifications is a much safer and direct strategy for getting to a solution than going towards a custom 
 implementation.
@@ -181,9 +179,9 @@ Experiments i have conducted included:
 - constraining actor gradient to obtain smoother actions
 - experimenting with a number of other parameters of the neural networks.
 
-#### Selected Custom Modifications
+### Selected Custom Modifications
 
-##### Reward spread
+#### Reward spread
 
 In the tennis environment reward is qite sparse, and in awarded with delay with respect to the action which is actually 
 responsible for obtaining it. The player's actions resulting in the preparation, reception and stroke are all terminated 
@@ -205,7 +203,7 @@ experiences. At every new timestep, if the FIFO is full, a "modified-reward" exp
 to the agent which will store it in its experience buffer. My final solution used N=3. Way larger experiments would be 
 needed to understand the optimal value of N, which is thightly related to the actual environment.
 
-##### Agent Coach
+#### Agent Coach
 
 A main challenge in the use of ddpg algorithm is achieving stability. Many of my experiments showed points of high score
 with gread instability, similarly to what is shown by the Benchmark Implementation, but to a much greater degree with 
@@ -248,9 +246,9 @@ This agent coach configuration did improve performance (my previous results were
 achieve the desired stability. Improvement of this technique, with possibly the addition of new agents, is part of Future 
 work.
 
-#### Solution Configuration
+### Solution Configuration
 
-My final configuration solving the tennis environment is as follows:
+My final configuration solving the tennis environment in 10975 episodes  is as follows:
  - I start with 2 separate ddpg agents having separate experience buffers and identical configuration but different seed for starting 
  weights and experience sampling. their parameters are as follows:
    - "vanilla" (no twin ddpg, no prioritized experience replay) 
@@ -284,7 +282,7 @@ My final configuration solving the tennis environment is as follows:
 In the **delivery** release of this repository, ddpg_tennis_SOLUTION can be run to repeat training in the exact same 
 configuration. 
 
-#### Results
+### Results
 
 The following graph shows the evolution of score during training of my final agent pair. As shown, performance 
 does drop after reaching a peak, but the peak is sufficently stable to achieve score well beyond 0.5 over 100
@@ -335,8 +333,6 @@ to be achieved by parameter tuning and possibly verification of the implementati
 After parameters and implementation have been toroughly investigated, I would focusing on a single algorithm 
 modification, as assessing the actual contribution of that single modification to algorithm performance is by itself a 
 very complex task requiring full attention.
-
-#### My choice
 
 Two main challenge in deep reinforcement learning are strong parameter sensitivity and instability. 
 Both of these challenges I have attempted to address with my **Agent Coach** algorithm with limited succes.
