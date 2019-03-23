@@ -120,6 +120,11 @@ class ddpgAgent:
         action = self.net["act_tg"].forward_np(state)
         return action
 
+    def reset_lr(self):
+
+        self.opt["act"] =  torch.optim.Adam(self.net["act_loc"].parameters(), lr=self.pars["lr_act"])
+        for twin in self.twins:
+            self.opt["crit" + twin] = torch.optim.Adam(self.net["crit_loc" + twin].parameters(), lr=self.pars["lr_crit"])
 
     def train(self):
         exp_batch =self.mem.draw(self.pars["batch"])

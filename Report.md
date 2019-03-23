@@ -87,12 +87,16 @@ Several algorithms can be trained on this collaborative task, some options are t
 1. **A single agent with full state**. A single is fed with the ensemble of states (and possibly last actions) of both players, and jointly selects
 the actions of both players. This can be done with a single actor-critic network, with same critic but separate actors, 
  or with separate networks which possibly share the experience buffer.
- This option has been discarded as it does not seem fair. I want my agent to be able to play tennis collaboratively 
- without having to access the other player's obesrvation or action.
+ I have discarded this option as I feel that feeding the observation of the opposite player goes against the 
+ concept of the environment, which gives as output 2 separate observations for 2 players. With this option, the learned 
+ agent would have the handicap of not being able to play without the opposite agent observations.  
  
-2. **A single agent with separate observations**. A single agent can be trained and used to take actions for both players, having access to the observation of only one
-player at a time. The Agent can use the same actor critic network in both roles, and could chose to draw actions from 
-the target actor network instead of from the local network for one of the two players.
+2. **A single agent with separate observations**. A single agent can be trained and used to take actions for both 
+players, having access to the observation of only one player at a time. 
+The Agent can use the same actor critic network in both roles, and could chose to draw actions from 
+the target actor network instead of from the local network for one of the two players. 
+Although both players are used in training, the learned agent will only need to have access to the observations of a 
+single agent in order to be able to play.
 
 3. **Separate agents sharing information**. 2 separate agents can be trained, and these can share some common 
 information. These could for example share the same experience buffer (or just have identical experience buffers) or 
@@ -101,19 +105,10 @@ even a common critic network, or perhaps just a common target critic network.
 4. **Completely separate agents**. Training 2 completely separate ddpg agents is also an options although exploiting the 
 information available from the interaction of the agents should be beneficial.
 
-In my experiments, I have explored using a single agent (option 2.), using the target actor network for one of the 
-two players, and using separate agents with same experience buffer (option 3 shared experiences). None of the options 
-stood out as superior to others, my final network has been obtained with 2 separate agents sharing experiences.
-
-I have preferred the separate agent solution because I do not want my agent to learn a strategy which is compatible with
-the strategy of different trained agents and does not rely on itself playing on both sides.
-Actually, this inter-dependency could also happen when 2 separate agents are trained toghether, and there is no reason 
-why each of the 2 agents should always play in the same role. 
-Training N (2 or 3 for example) separate players and randomly selecting 2 players in each episode would also be a 
-good strategy to lead to roboust playing styles which avoid inter-dependency.
-
-To verify that my solution does not rely on the inter-dependency between agents, I will show [0.5 - 1.0] average score 
-combining 2 agents which never actually played together during training.
+In my experiments, I have mainly explored using a single agent (option 2.), using the target actor network for one of the 
+two players, and using separate agents with same experience buffer (option 3 shared experiences). 
+My final solution is a combination of options 2, 3 and 4, using an "agent coach" as explained in the **Selected Custom 
+Modifications** paragraph.
 
 ### Implementation
 
@@ -121,16 +116,17 @@ combining 2 agents which never actually played together during training.
 
  - **ddpg_tennis_SOLUTION.py** is the main file of the project. It is used to train a DDPG agent on the tennis 
     environment and includes several training improvement ideas.
-    - A *coach* algorithm (commented out) tried to stabilize learning by storing and reloading network state depending on
-    score trend. The idea was to roll back to a previous state and reduce training rate every time a performance drop is 
-    observed.
-    - an *epsilon_greedy* noise approach. A very moderate correlated noise is added to actions to favour to balance
+    - A **Agent Coach** algorithm trying to stabilize learning by storing and reloading network state depending on
+    score trend. The idea is to react to performance drop when performance drops, taking advantage of the ability of 
+    saving agent checkpoints. This will be described further in the **Selected Custom Modifications** paragraph
+    - an **epsilon greedy noise** approach. A very moderate correlated noise is added to actions to favour to balance
     exploration and exploitiation, but a strong additional noise would be added to some episodes with probability 
-    noise_p, to prevent the agent from locking in a 0 reward state.
-    - a *reward spread* mechanism to speed uo training in a reward sparse environment. In the tennis environment 
-    reward is awarded with delay with respect to the action which is actually responsible for obtaining it, and is 
-    awarded in a very limited number of actions. A local buffer stores the latest experiences. Whenever an experience 
-    including a non-zero reward is received from the environment, this reward is spread among the N latest experiences.
+    noise_p, to prevent the agent from locking in a 0 reward state. The strong noise probability decays with time.
+    - a **reward spread** mechanism to speed up training in a reward sparse environment. This will be described further in
+     the **Custom Modifications** paragraph
+     In the tennis environment 
+
+    
  - **inspect_results.py** is the main file used to show the trained agent performance.
     A pair of agents can be loaded from saved checkpoints and tested on the TENNIS environment. 
     By default, **inspect_results.py** will load a pair of agents scoring on average >0.5 on the first 100 episodes of 
@@ -144,7 +140,7 @@ combining 2 agents which never actually played together during training.
    a ddpg implementation which tries to address the possible overestimation of the Q function by the critic. 
    Twin ddpg uses 2 local and 2 target critic networks and uses the minimum among the Q values estimated by 
    the critic networks in training.
-   - *lazy_actor* weight, adding cost to high action values in an attempt to obtain smoother, more natural playing 
+   - **lazy_actor** weight, adding cost to high action values in an attempt to obtain smoother, more natural playing 
    styles. This adds a positive term proportional to the action energy to the gradient computed in actor network 
    training.
  - **experience_replayer.py** the experience buffer used by the ddpg_agent, supporting a from of prioritized experience
@@ -152,12 +148,13 @@ combining 2 agents which never actually played together during training.
  
 ### Approach, Experimentation and Future Work
 
+#### General Approach
 In the previous assignments, I have learned to my expense that tuning a baseline solution and performing the minimum 
 number of modifications is a much safer and direct strategy for getting to a solution than going towards a custom 
 implementation.
 
 Scientific papers such as [Deep Reinforcement Learning that Matters](https://arxiv.org/pdf/1709.06560.pdf) 
-confirm my experience showing how performance id deep reinforcement learning is strongly affected by random seeding, 
+confirm my experience showing how performance in deep reinforcement learning is strongly affected by random seeding, 
 specific implementation choices, hyperparameters. These aspects could easily outweight algorithm modifications 
 in determining the overall score.
 
@@ -180,44 +177,167 @@ Experiments i have conducted included:
 - constraining actor gradient to obtain smoother actions
 - experimenting with a number of other parameters of the neural networks.
 
-None of these ideas revealed itself to have a crucial impact on the performance of my agent, but most of them would have
-required a much more significant research work and all of them were worth trying and are the starting point of my future 
-work. 
+#### Selected Custom Modifications
 
-#### Brute force solution
+##### Reward spread
 
-As my time for this project has come to an end, I have decided to suspend experimentation and settle on a brute force 
-solution to obtain an agent (a pair of agents) which will satisfy the project requirements. 
+In the tennis environment reward is qite sparse, and in awarded with delay with respect to the action which is actually 
+responsible for obtaining it. The player's actions resulting in the preparation, reception and stroke are all terminated 
+before the ball makes it to the other side of the table, and he players actions in the few timesteps separating the 
+stroke from the crossing have little to no influence on the overall score, but are instead the first to be  the reward, buimpacted by 
+the positive reward and see their action values risen.
+The high action value would eventually propagate to the state-action pairs which are actually responsible of the score 
+but this may take a long time due to the sparsity of the reward. To speed this up I have introduced a reward spread 
+algrithm.
 
-To solve the tennis environment, I have trained a pair of vanilla ddpg agents adding frequent shots of strong correlated
-noise to their actions, to favor exploration. The configuration used for this long training run is as follows:
+A natural way to spread reward would be to low-pass filtering input reward values, so that part of the reward collected 
+in the current episode is propagated to future episodes. This would reduce reward sparsity, but substantilally delay 
+reward, would increment the separation between the reward and the actual state-action pairs which contribute to its 
+achevement.
 
-The pair of ddpg agents used in this training run have the following configuration:
- - Replay buffer size : 100.000 experiences, used only when at least 20.000 are stored
- (For simplicity, the Replay Buffer is not shares but there are 2 identical replay buffers where experienced from both 
- agents are stores, one in each angent.)
- - batch size : 128 samples
- - Gamma (discount factor) : 0.99
- - Tau (soft update of target network) : 0.1
- - Learning Rate of Actor network : 0.0001 (Actor learing takes place every 2 critic learning runs) 
- - Learning Rate of Critic network : 0.0005 
- - Each Agent Learns from a batch of samples in the replay buffer after every 2 action iterations
- - Both networks architectures use 400 + 300 nodes with relus as default. Actions are fed to the second layer in the Critic Network
- - Filtered gaussian noise with standard deviaton 0.5 is added to each action in an episode with probability decaying from 1 to 1/20
- - Filtered gaussian noise with standard deviaton 0.02 is added to each action in all episodes
+In order to reduce both with sparsity and delay, and input FIFO buffer is placed before the experience replay buffer. 
+This buffer stores the last N experiences and speads reward observed in the most recent experience to the N previous 
+experiences. At every new timestep, if the FIFO is full, a "modified-reward" experience tuple exits the FIFO and is fed
+to the agent which will store it in its experience buffer. My final solution used N=3. Way larger experiments would be 
+needed to understand the optimal value of N, which is thightly related to the actual environment.
 
-In the **delivery** release of this repository, ddpg_tennis_SOLUTION can be run to repeat training in the same configuration. 
+##### Agent Coach
 
-This training run lasted several hours, and I have collected checkpoints of agents states acheving high average score.
-Due to the instability of the algorithm and to the strong noise,  my agents did not score high for 100 consecutive 
-episodes during training. this can be observed in the following figure
+A main challenge in the use of ddpg algorithm is achieving stability. Many of my experiments showed points of high score
+with gread instability, similarly to what is shown by the Benchmark Implementation, but to a much greater degree with 
+the set of parameters I have tested.  
 
-Having saved their state, I could anyways verify that my agents pass the 100 episodes average 
-score requirement during test. The following figures show the per episode and average score of the selected pair of 
-agents tested for 200 frames on the tennis environment with seeds 0 to 5. The agent consistently collects score >0.5.
+The pourpose of the **Agent Coach** algorithm is to reduce instability making the algorithm less dependent on 
+selected parameters.
+
+My final solution uses 2 ddpg agents with same parameters and architecture, and initially fed with the same 
+experiences collected by both agents. The score of the 2 agents would rise when a local optimum is found and and then 
+drop again, as the parameters of any of the agents get displaced from a local optimum. 
+
+The **Agent Coach** detects and reacts to performance drop as follows:
+- Whenever a new max score is reached, **Agent Coach**  creates a checkpoint holding the new *coach_last_score* (the 
+new score max) and the state of both agents. The training rate is also slightly increased for both agents.
+- When the performance drops beyond a portion of the saved *coach_last_score*, the **Agent Coach** replaces one of the current  
+2 agents (selected at random) with one of the 2 agents (still selected at random) in the saved checkpoint. The training 
+rate is also reduced for both agents. Additionally *coach_last_score* is slightly reduced for duture comparisons
+
+Increments and decrements of training rate are designed to get to thigh training rate and fast solution on easy 
+environments (where performance and training rate would just rise) and slower training rate on more difficult cases, 
+which are more affected by instability.
+
+The random selection of agents to be replaced provides means for widening the search space and dropping faulty agents
+(the best combination will score a new top_score and get to a new checkpoint.) 
+
+The final reduction of *coach_last_score* is needed as we want to avoid the agents from being locked on a possibly very 
+low local maximum. This gradual score target drop provides a means from escaping from coach reloads and exploring a new 
+solution if needed.
+
+It should be noted that agents are saved and loaded together with their own experience replay buffers. 
+While due to the training script configuration, the two agents would have an identical experience replay buffer, loading single agents 
+from past checkpoints will result in different experience buffers. 
+
+It should be also noted that when 2 consecutive performance drops occurr, and the 2 current agents are replaced with the 
+same previous agents, these will not  result in identical agents, and the experience buffer and the weights of the first
+replaced agent will have evolved before the other replaced agent is loaded. 
+
+This agent coach configuration did improve performance (my previous results were nuch mure unstable) does not yet 
+achieve the desired stability. Improvement of this technique, with possibly the addition of new agents, is part of Future 
+work.
+
+#### Solution Configuration
+
+My final configuration solving the tennis environment is as follows:
+ - I start with 2 separate ddpg agents having separate experience buffers and identical configuration but different seed for starting 
+ weights and experience sampling. their parameters are as follows:
+   - "vanilla" (no twin ddpg, no prioritized experience replay) 
+   - Replay buffer size : 100.000 experiences, used only when at least 10.000 are stored
+   - batch size : 128 samples
+   - Gamma (discount factor) : 0.99
+   - Tau (soft update of target network) : 0.02
+   - Starting Learning Rate of Actor network : 0.0001 
+   - Actor learning takes place every 2 critic learning calls.
+   - Starting Learning Rate of Critic network : 0.0003
+   - The network architechture for both actor and critic consists of 2 fully connected  hidden layers of size 400 and 300 
+   each followed by leacky relu. Actions are fed to as input the second cully connected layer in the critic network.
+      
+ - The general training configuration is as follows:
+   - Each Agent Learns from a batch of samples in the replay buffer after every 2 action iterations
+   - Filtered gaussian noise with standard deviaton 0.5 is added to each action in an episode with probability decaying 
+    from 1 to 0.001. This noise is meant to explore very different solutions where score is tuck to 0 or platoes.
+   - Filtered gaussian noise with standard deviaton 0.02 is added to each action in all episodes. This noise is
+    meant for local exploration.
+   - Noise is added to the actions selected by the agents. These actions are clipped in valid range and then used to 
+    interact with the environment and saved in the experience tuples fed to the agents for learning.
+ 
+ - The **Agent Coach** algorithm interacts with learning every 25 episodes  as follows.
+   - copmute average score of last 25 episodes (*score_25*) 
+   - if *score_25* is 0.01 higher than *coach_last_score* (the "top score" up to now), update it with *score_25*, 
+   increment learning rate by factor 1.03 and do a checkpoint of the 2 agents.
+   - otherwise, if *score_25* went below 0.8 * *coach_last_score*, reload a random agent, reduce learning rate of all
+   agents by factor 0.95 and reduce *coach_last_score* by factor of 0.9. (this last operation is needed so that)  
+    
+
+In the **delivery** release of this repository, ddpg_tennis_SOLUTION can be run to repeat training in the exact same 
+configuration. 
+
+#### Results
+
+The following graph shows the evolution of score during training of my final agent pair. As shown, performance 
+does drop after reaching a peak, but the peak is sufficently stable to achieve score well beyond 0.5 over 100
+consecutive episodes.
+
+![score_graph](plots/final_score.jpg)
+
+I have selected the agent 2 in episode 10975 of my final configuration as the winning agent. 
+To make sure the achieved score is not just due to a combination of episodes, I have tested this agent in
+self play, showing an average performance close to 1 in 5 different 100 episode experiemnts.
+
+**test seed=0**
+![inspect_seed_0](plots/score_inspect_seed_0.jpg)
+**test seed=1**
+![inspect_seed_1](plots/score_inspect_seed_1.jpg)
+**test seed=2**
+![inspect_seed_2](plots/score_inspect_seed_2.jpg)
+**test seed=3**
+![inspect_seed_3](plots/score_inspect_seed_3.jpg)
+**test seed=2**
+![inspect_seed_4](plots/score_inspect_seed_4.jpg)
+
+The graphs highlight the agents qualities and flaws. The agent has a hard time at start, sometimes missing the
+very first strike, but is very effective once the ball is in play easily getting to what i believe to be the score cap.
+
 
 ### Future Work
 
-Many potential directions for future work have been highlighted in the  **Approach, Experimentation and Future Work** paragraph. 
-Exploiting the ability to save and restore weights as a form stabilization seems the most promising direction.
+Some interesting algorithms, suct as the
+[twin ddpg algorithm](https://spinningup.openai.com/en/latest/algorithms/td3.html]) and 
+[Proritized experience replay](https://arxiv.org/abs/1511.05952) have been prototyped but not included in the final
+solution. [Parameter noise](https://openai.com/blog/better-exploration-with-parameter-noise/) and gradient clipping are 2 additional features which seem promising for the solution 
+of this environment but which i have not explored yet.
+The main reason why all these algorithms have not been included in the final solution is that every additional algorithm 
+requires a significant work of analysis, verification and parameter tuning, further incrementing the dimensionality o 
+the papameter optimization. 
+
+[Deep Reinforcement Learning that Matters](https://arxiv.org/pdf/1709.06560.pdf) shows how performance id deep reinforrcement 
+learning is strongly affected by random seeding, specific implementation choices, hyperparameters. 
+The findings of these paper are in line with my experience up to now: random seeding, specific implementation choices, 
+hyperparameters can easily outweight algorithm modifications in determining the overall score, and most 
+algorithm modifications are only effective with appropriate parameter tuning.
+
+As a consequence, while tying to implement, experimenting and getting a feeling of different 
+algorithm modification may be beneficial and interesting. Focusing on a single algorithm and modification and 
+the actual contribution of that single modification to algorithm performance is by itself a very complex task 
+requiring full attention.
+
+#### My choice
+
+Two main challenge in deep reinforcement learning are strong parameter sensitivity and instability. 
+Both of these challenges I have attempted to address with my **Agent Coach** algorithm with limited succes.
+
+As future work, I would try to extend and improve on this algorithm on the following directions:
+- Allowing the algorithm to control additional parameters, among which noise (parameter or action)
+- Extending the algorithm to work on collaborative, competitive and single agent environments, using an 
+  team on N>2 agents (with the idea of a coach substituting a player when its performance drops)
+- Working on a released implementation of ddpg and on a standard set of environment, and setting up a coherent
+  performance analysis framework to be able to actually evaluate the contribution of the algorithm to training.
 

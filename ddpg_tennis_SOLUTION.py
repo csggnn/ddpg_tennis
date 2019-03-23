@@ -200,30 +200,52 @@ for episode in range(1, 150000):   # play game for 5 episodes
         #    pickle.dump([scores_list, scores_mean100], sf)
 
 
-"""
+    if not os.path.exists("tmp_checkpoints/coach_last/"):
+        os.mkdir("tmp_checkpoints/coach_last/")
+        os.mkdir("tmp_checkpoints/coach_last/1/")
+        os.mkdir("tmp_checkpoints/coach_last/2/")
     if (episode>200 and  episode % 25  == 0):
-        print("episode "+str(episode)+ ", mean last_score: "+str(np.mean(scores_list[-25:])) )
         if coach_last_score>0.1 and np.mean(scores_list[-25:])<coach_last_score*0.8:
-            coach_last_score*=0.8
+
+            print("COACH episode "+str(episode)+ ", mean last_score: "+str(np.mean(scores_list[-25:])) )
             print("rolling back as score was previously "+ str(coach_last_score))
-            agent.load_checkpoint("tmp_checkpoints/coach_last")
-            sel= random.choice(["a", "c", "n"])
-            if sel =="a":
-                agent.pars["lr_act"] *=0.85
-            elif sel == "c":
-                agent.pars["lr_crit"] *= 0.85
-            elif sel == "n":
-                agent.pars["noise_in"] *= 1.2
+            coach_last_score *= 0.9
+            if np.random.rand()>0.5:
+                print("reset agent 1")
+                if np.random.rand() > 0.5:
+                    agent.load_checkpoint("tmp_checkpoints/coach_last/1/")
+                else:
+                    agent.load_checkpoint("tmp_checkpoints/coach_last/2/")
+
+            else:
+                print("reset agent 2")
+                if np.random.rand() > 0.5:
+                    agent2.load_checkpoint("tmp_checkpoints/coach_last/1/")
+                else:
+                    agent2.load_checkpoint("tmp_checkpoints/coach_last/2/")
+            agent.pars["lr_act"] *= 0.95
+            agent.pars["lr_crit"] *= 0.95
+            agent.reset_lr()
+            agent2.pars["lr_act"] *= 0.95
+            agent2.pars["lr_crit"] *= 0.95
+            agent2.reset_lr()
+            print("learning rates are now: [act="+str(agent2.pars["lr_act"])+" crt="+str(agent2.pars["lr_crit"]) )
         else:
-            coach_last_score=np.mean(scores_list[-25:])
-            agent.checkpoint("tmp_checkpoints/coach_last")
-            if coach_last_score>0.03:
-                agent.pars["lr_act"] *=1.01
-                agent.pars["lr_crit"] *=1.01
-                agent.pars["noise_in"] *=0.99
+            if np.mean(scores_list[-25:])>coach_last_score+0.01:
+                print("COACH episode " + str(episode) + ", mean last_score: " + str(np.mean(scores_list[-25:])))
+                print("saving checkpoint for score improvement from " + str(coach_last_score))
+                agent.pars["lr_act"] *= 1.03
+                agent.pars["lr_crit"] *= 1.03
+                agent2.pars["lr_act"] *= 1.03
+                agent2.pars["lr_crit"] *= 1.03
+                agent.reset_lr()
+                agent2.reset_lr()
+                coach_last_score=np.mean(scores_list[-25:])
+                agent.checkpoint("tmp_checkpoints/coach_last/1")
+                agent2.checkpoint("tmp_checkpoints/coach_last/2")
+                print("learning rates are now: [act=" + str(agent2.pars["lr_act"]) + " crt=" + str(
+                    agent2.pars["lr_crit"]))
 
-
-"""
 wait = input("PRESS ENTER TO CONTINUE.")
 env.close()
 
